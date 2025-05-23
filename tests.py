@@ -19,8 +19,8 @@ def test_get_current_time_format():
 def test_user_messages():
     # Simulate user messages
     user_messages = [
-        "What time is it in Cupertino?",
         "Can you tell me the current time?",
+        "What time is it in Cupertino?",
         "What is the current UTC time?",
         "Time check for Malvern, PA, please.",
         "Just checking the time for Cupertino.",
@@ -33,7 +33,7 @@ def test_user_messages():
         result = app.invoke(state)
         assert isinstance(message, str), f"- Invalid message type: {message}"
         print(f"+user message: {result['messages'][0].content}, result: {result['messages'][-1].content}")
-        print(f"full state: {result}")
+        #print(f"full state: {result}")
 
 
 if __name__ == "__main__":

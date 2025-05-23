@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
+import tzlocal
 from langchain_core.runnables import RunnableLambda
 from typing_extensions import TypedDict
 
@@ -53,11 +54,9 @@ def test_agent_node(state: dict) -> dict:
 @tool
 def get_current_time_tool(timezone:str="Etc/UTC") -> str:
     """Get the current time in the specified timezone.
-
     Timezone must be in IANA format (e.g. "UTC", "Europe/Berlin", "America/New_York").
-
     Examples:
-    - "What time is it?" - use default timezone=Etc/UTC
+    - "What time is it?" - timezone of the system if known, otherwise use UTC
     - "What time is it in Tokyo?" - timezone="Asia/Tokyo"
     - "Tell me the time in LA" - timezone="America/Los_Angeles"
     """
@@ -75,7 +74,6 @@ def chatbot_node(state: dict) -> dict:
     if not messages:
         return {"messages": [AIMessage(content="Hi! I am a simple chatbot, can tell what is current time.")]}
 
-
     last = messages[-1]
     if isinstance(last, HumanMessage):
         content = last.content.lower()
@@ -92,6 +90,9 @@ tools = [get_current_time_tool]
 # Bind tools to the LLM
 llm_with_tools = llm.bind_tools(tools)
 
+# Define the system time zone from system settings
+system_time_zone = tzlocal.get_localzone_name()  # This should be set based on the system's timezone
+
 
 # Wrap chatbot logic into a node
 def agent_step(state: dict) -> dict:
@@ -102,13 +103,14 @@ def agent_step(state: dict) -> dict:
                 "You MUST wait for the result of each tool call before replying. "
                 "Tool outputs appear as messages of type 'tool' with a matching tool_call_id. "
                 "When you see a tool result, explain it clearly to the user."
+                "you are working in the timezone of the system, which is " + system_time_zone + ". "
             )
         ),
         *state["messages"]
     ]
     response = llm_with_tools.invoke(messages)
-    print("agent_node: messages =", messages),
-    print("agent_node: response =", response),
+    #print("agent_node: messages =", messages),
+    #print("agent_node: response =", response),
     # Check for OpenAI-style tool call
     if hasattr(response, "tool_calls") and response.tool_calls:
         tool_call = response.tool_calls[0]
