@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from langchain_core.runnables import RunnableLambda
 from typing_extensions import TypedDict
@@ -50,11 +51,24 @@ def test_agent_node(state: dict) -> dict:
     return {"messages": state["messages"] + [AIMessage(content=reply)]}
 
 @tool
-def get_current_time_tool() -> str:
-    """Get the current UTC time as an ISO-8601 string."""
-    now = datetime.now(timezone.utc).isoformat() + "Z"
-    return now
+def get_current_time_tool(timezone:str="Etc/UTC") -> str:
+    """Get the current time in the specified timezone.
 
+    Timezone must be in IANA format (e.g. "UTC", "Europe/Berlin", "America/New_York").
+
+    Examples:
+    - "What time is it?" - use default timezone=Etc/UTC
+    - "What time is it in Tokyo?" → timezone="Asia/Tokyo"
+    - "Tell me the time in LA" → timezone="America/Los_Angeles"
+    """
+    #ZoneInfo default timezone is Etc/UTC, so if no timezone is provided, it will return UTC time
+    if timezone.upper() == "UTC":
+        timezone = "Etc/UTC"
+    try:
+        now = datetime.now(ZoneInfo(timezone)).isoformat()
+        return f"The current {timezone} time is {now}"
+    except Exception as e:
+        return f"Error: {e}. Try without timezone, or use a valid timezone like 'UTC', 'America/New_York', or 'Asia/Tokyo'."
 
 def chatbot_node(state: dict) -> dict:
     messages = state.get("messages", [])
@@ -101,7 +115,7 @@ def agent_step(state: dict) -> dict:
         tool_call = ToolCall(
             name=tool_call["name"],
             id=tool_call["id"],
-            args={}
+            args=tool_call["args"],
         )
         return {
             "messages": state["messages"] + [AIMessage(content="", tool_calls=[tool_call])]
@@ -130,7 +144,11 @@ graph.set_entry_point("chatbot")
 # Route to tool if requested
 graph.add_conditional_edges(
     "chatbot",
-    lambda state: state.get("tool_calls", [{"tool": "END"}])[0]["tool"]
+    lambda state: (
+        state["messages"][-1].tool_calls[0]["name"]
+        if isinstance(state["messages"][-1], AIMessage) and state["messages"][-1].tool_calls
+        else "END"
+    )
 )
 
 # Loop tool response back to chatbot

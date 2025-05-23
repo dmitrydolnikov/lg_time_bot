@@ -3,5 +3,6 @@ langchain-community
 langgraph
 langchain_openai
 openai
+tzdata
 #pip install "langgraph-cli[inmem]" #this is for local dev server
 

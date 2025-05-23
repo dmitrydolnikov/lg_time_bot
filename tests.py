@@ -19,11 +19,11 @@ def test_get_current_time_format():
 def test_user_messages():
     # Simulate user messages
     user_messages = [
-        "What time is it?",
+        "What time is it in Cupertino?",
         "Can you tell me the current time?",
         "What is the current UTC time?",
-        "Time check, please.",
-        "Just checking the time.",
+        "Time check for Malvern, PA, please.",
+        "Just checking the time for Cupertino.",
     ]
 
     for message in user_messages:
