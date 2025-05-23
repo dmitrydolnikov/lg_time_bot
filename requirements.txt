@@ -1,5 +1,7 @@
-langchain
+langchain-core
+langchain-community
 langgraph
-
+langchain_openai
+openai
 #pip install "langgraph-cli[inmem]" #this is for local dev server
 

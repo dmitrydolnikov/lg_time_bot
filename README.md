@@ -8,3 +8,18 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 langgraph dev
+
+
+# Langgraph queries
+when you run langgraph dev, browser will open and show the query editor with graph state
+you can run queries like this:
+```json 
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "What time is it?"
+    }
+  ]
+}
+```
