@@ -58,8 +58,8 @@ def get_current_time_tool(timezone:str="Etc/UTC") -> str:
 
     Examples:
     - "What time is it?" - use default timezone=Etc/UTC
-    - "What time is it in Tokyo?" → timezone="Asia/Tokyo"
-    - "Tell me the time in LA" → timezone="America/Los_Angeles"
+    - "What time is it in Tokyo?" - timezone="Asia/Tokyo"
+    - "Tell me the time in LA" - timezone="America/Los_Angeles"
     """
     #ZoneInfo default timezone is Etc/UTC, so if no timezone is provided, it will return UTC time
     if timezone.upper() == "UTC":
