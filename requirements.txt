@@ -1,0 +1,5 @@
+langchain
+langgraph
+
+#pip install "langgraph-cli[inmem]" #this is for local dev server
+

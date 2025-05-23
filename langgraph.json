@@ -1,0 +1,6 @@
+{
+  "dependencies": ["langchain_core"],
+  "graphs": {
+    "default": "main:app"
+  }
+}
