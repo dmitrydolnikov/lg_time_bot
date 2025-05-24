@@ -24,3 +24,14 @@ you can run queries like this:
   ]
 }
 ```
+or for a specific city:
+```json 
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "What time is it in New York?"
+    }
+  ]
+}
+```

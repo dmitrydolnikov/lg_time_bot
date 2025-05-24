@@ -62,7 +62,7 @@ def test_agent_node(state: dict) -> dict:
     return {"messages": state["messages"] + [AIMessage(content=reply)]}
 
 @tool
-def get_current_time_tool(timezone:str="Etc/UTC") -> str:
+def get_current_time(timezone:str="Etc/UTC") -> str:
     """Get the current time in the specified timezone.
     Timezone must be in IANA format (e.g. "UTC", "Europe/Berlin", "America/New_York").
     Examples:
@@ -95,7 +95,7 @@ def chatbot_node(state: dict) -> dict:
 
     return {"messages": messages}
 
-tools = [get_current_time_tool]
+tools = [get_current_time]
 
 # Bind tools to the LLM
 llm_with_tools = llm.bind_tools(tools)
@@ -112,79 +112,32 @@ system_prompt = "You are an OpenAI-compatible assistant that uses tools through 
 # Wrap chatbot logic into a node
 def agent_step(state: dict) -> dict:
     try:
-        print("📥 Raw state at chatbot input:", state)
+        messages = state.get("messages", [])
 
-        # Normalize the incoming state from Studio
-        while isinstance(state, dict) and "values" in state:
-            state = state["values"]
+        if messages:
+            last = messages[-1]
+            if isinstance(last, AIMessage) and last.content and not getattr(last, "tool_calls", None):
+                print("✅ Already finalized. Skipping.")
+                return {"messages": messages+[], "message_type": "final"}
 
-        raw_messages = state.get("messages", [])
+        if not messages:
+            return {"messages": [AIMessage(content="Hi! Ask me the time.")], "message_type": "final"}
 
-        # Safely normalize messages to BaseMessage objects
-        clean_messages = []
-        for m in raw_messages:
-            if isinstance(m, dict):
-                role = m.get("role") or m.get("type")
-                content = m.get("content", "")
-                if role in ("human", "user"):
-                    clean_messages.append(HumanMessage(content=content))
-                elif role in ("ai", "assistant"):
-                    clean_messages.append(AIMessage(content=content))
-                elif role == "system":
-                    clean_messages.append(SystemMessage(content=content))
-                elif role == "tool":
-                    tool_call_id = m.get("additional_kwargs", {}).get("tool_call_id", "") or m.get("tool_call_id", "")
-                    clean_messages.append(ToolMessage(content=content, tool_call_id=tool_call_id))
-                else:
-                    print(f"⚠️ Skipped unknown message role/type: {role}")
-            elif hasattr(m, "type"):  # already BaseMessage
-                clean_messages.append(m)
-            else:
-                print(f"⚠️ Skipped unknown message format: {m}")
+        llm_input = [SystemMessage(content=system_prompt)] + messages
+        response = llm_with_tools.invoke(llm_input)
 
-        # Check for list nesting issues
-        if len(clean_messages) == 1 and isinstance(clean_messages[0], list):
-            clean_messages = clean_messages[0]
-
-        # Insert system prompt explicitly
-        clean_messages.insert(0, SystemMessage(content=system_prompt))
-
-        # Final explicit validation
-        from langchain_core.messages import BaseMessage
-        for i, msg in enumerate(clean_messages):
-            assert isinstance(msg, BaseMessage), f"Non-BaseMessage at index {i}: {msg}"
-        print("✅ clean_messages after validation:", clean_messages)
-
-        # Now safely invoke the LLM
-        response = llm_with_tools.invoke(clean_messages)
-        print("🤖 agent_node response:", response)
-
-        # Handle potential tool call
         if hasattr(response, "tool_calls") and response.tool_calls:
-            tool_call = response.tool_calls[0]
-            tool_call_obj = ToolCall(
-                name=tool_call["name"],
-                args=tool_call["args"],
-                id=tool_call["id"]
-            )
+            return {"messages": messages + [response], "message_type": "tool_call"}
 
-            ai_msg = AIMessage(content="", tool_calls=[tool_call_obj])
-            return {"messages": raw_messages + [ai_msg], "message_type": "tool_call"}
+        if response.content.strip():
+            return {"messages": messages + [response], "message_type": "final"}
 
-
-        # Always explicitly convert response back to dict for Studio
-        response_dict = {
-            "type": "ai",
-            "content": response.content
-        }
-        final_messages = raw_messages + [response_dict]
-
-        return {"messages": final_messages, "message_type": "final"}
+        return {"messages": messages+[], "message_type": "final"}
 
     except Exception as e:
         print(f"❌ agent_step error: {e}")
-        print(f"❌ final state at error: {state}")
         raise
+
 
 agent_node = RunnableLambda(agent_step)
 
@@ -192,34 +145,38 @@ agent_node = RunnableLambda(agent_step)
 graph = StateGraph(State)
 
 # Add agent node
-graph.add_node("chatbot", RunnableLambda(agent_step))
+graph.add_node("chatbot", agent_node)
 
 # Add tool node using ToolNode
-tool_node = ToolNode([get_current_time_tool])
-graph.add_node("get_current_time_tool", tool_node)
+tool_node = ToolNode([get_current_time])
+graph.add_node("get_current_time", tool_node)
 
 #graph.add_edge(START, "chatbot")
 # Entry point
 graph.set_entry_point("chatbot") #this is sufficient to start the graph
 
 #for confitional routing
-tool_to_node_map = {
-    "get_current_time": "get_current_time_tool",
-    "get_current_time_tool": "get_current_time_tool"
-}
+
 
 def get_tool_name(state):
     last = state["messages"][-1]
+
     if isinstance(last, AIMessage) and last.tool_calls:
-        tool_name = last.tool_calls[0]["name"]
-        return tool_to_node_map.get(tool_name, "END")
-    return "END"
+        return last.tool_calls[0]["name"]
+
+    if isinstance(last, ToolMessage):
+        return "chatbot"
+
+    return END
+
+
 
 # Route to tool if requested
 graph.add_conditional_edges("chatbot", get_tool_name)
+#graph.add_edge("chatbot", "get_current_time")  #explicit name for Studio recognition
 
-graph.add_edge("get_current_time_tool", "chatbot")
-
+graph.add_edge("get_current_time", "chatbot")
+graph.add_edge("chatbot", END)
 # Compile the app
-graph.set_finish_point("chatbot")
+#graph.set_finish_point("chatbot")
 app = graph.compile()
