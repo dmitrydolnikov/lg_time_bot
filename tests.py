@@ -19,20 +19,27 @@ def test_get_current_time_format():
 def test_user_messages():
     # Simulate user messages
     user_messages = [
-        "Can you tell me the current time?",
+        #"Can you tell me the current time?",
         "What time is it in Cupertino?",
-        "What is the current UTC time?",
-        "Time check for Malvern, PA, please.",
-        "Just checking the time for Cupertino.",
+        #"What is the current UTC time?",
+        #"Time check for Malvern, PA, please.",
+        #"Just checking the time for Cupertino.",
     ]
 
     for message in user_messages:
+        # simulate raw Studio-style input
         state = {
-            "messages": [HumanMessage(content=message)]
+            "messages": [
+                {"type": "human", "content": "What time is it in Tokyo?"}
+            ]
         }
+
+        #state = {"messages": [HumanMessage(content=message)]}
         result = app.invoke(state)
         assert isinstance(message, str), f"- Invalid message type: {message}"
+        #print(f"+user message: {result['messages'][0].content}, result: {result['messages'][-1].content}")
         print(f"+user message: {result['messages'][0].content}, result: {result['messages'][-1].content}")
+
         #print(f"full state: {result}")
 
 

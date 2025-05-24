@@ -4,5 +4,7 @@ langgraph
 langchain_openai
 openai
 tzdata
+tzlocal
+python-dotenv
 #pip install "langgraph-cli[inmem]" #this is for local dev server
-
+#pip install debugpy

@@ -1,6 +1,13 @@
 {
-  "dependencies": ["langchain_core"],
+  "dependencies": [
+  "./",
+  "langchain_core",
+  "langchain_openai",
+  "python-dotenv",
+  "tzdata"
+  ],
   "graphs": {
     "default": "main:app"
-  }
+  },
+  "env": "./.env"
 }

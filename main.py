@@ -1,4 +1,6 @@
+import os
 from datetime import datetime, timezone
+from typing import List, Dict, Any
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
@@ -10,15 +12,23 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage, ToolCall
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage, ToolCall, convert_to_messages
 from langgraph.prebuilt import InjectedState, ToolNode
 from typing_extensions import Annotated
+from dotenv import load_dotenv
+import langgraph
+print(langgraph.__file__)
+print("main.py loaded")
 
+
+load_dotenv()
+key = os.getenv("QWEN_API_KEY")
+if not key:
+    raise ValueError("Put QWEN_API_KEY=sk-xxxxxxxxxx into .env file")
+    import sys
+    sys.exit(1)
 
 import re
-
-with open("alibaba.key", "r") as f:
-    key = f.read().strip()
 
 llm = ChatOpenAI(
     model="qwen-max",
@@ -93,40 +103,88 @@ llm_with_tools = llm.bind_tools(tools)
 # Define the system time zone from system settings
 system_time_zone = tzlocal.get_localzone_name()  # This should be set based on the system's timezone
 
+system_prompt = "You are an OpenAI-compatible assistant that uses tools through function calling. "\
+                    "You MUST wait for the result of each tool call before replying. "\
+                    "Tool outputs appear as messages of type 'tool' with a matching tool_call_id. "\
+                    "When you see a tool result, explain it clearly to the user."\
+                    "you are working in the timezone of the system, which is " + system_time_zone + ". "
 
 # Wrap chatbot logic into a node
 def agent_step(state: dict) -> dict:
-    messages = [
-        SystemMessage(
-            content=(
-                "You are an OpenAI-compatible assistant that uses tools through function calling. "
-                "You MUST wait for the result of each tool call before replying. "
-                "Tool outputs appear as messages of type 'tool' with a matching tool_call_id. "
-                "When you see a tool result, explain it clearly to the user."
-                "you are working in the timezone of the system, which is " + system_time_zone + ". "
-            )
-        ),
-        *state["messages"]
-    ]
-    response = llm_with_tools.invoke(messages)
-    #print("agent_node: messages =", messages),
-    #print("agent_node: response =", response),
-    # Check for OpenAI-style tool call
-    if hasattr(response, "tool_calls") and response.tool_calls:
-        tool_call = response.tool_calls[0]
-        tool_call = ToolCall(
-            name=tool_call["name"],
-            id=tool_call["id"],
-            args=tool_call["args"],
-        )
-        return {
-            "messages": state["messages"] + [AIMessage(content="", tool_calls=[tool_call])]
-        }
-    # If no tool call, return the response
-    return {
-        "messages": messages + [response]
+    try:
+        print("📥 Raw state at chatbot input:", state)
 
-    }
+        # Normalize the incoming state from Studio
+        while isinstance(state, dict) and "values" in state:
+            state = state["values"]
+
+        raw_messages = state.get("messages", [])
+
+        # Safely normalize messages to BaseMessage objects
+        clean_messages = []
+        for m in raw_messages:
+            if isinstance(m, dict):
+                role = m.get("role") or m.get("type")
+                content = m.get("content", "")
+                if role in ("human", "user"):
+                    clean_messages.append(HumanMessage(content=content))
+                elif role in ("ai", "assistant"):
+                    clean_messages.append(AIMessage(content=content))
+                elif role == "system":
+                    clean_messages.append(SystemMessage(content=content))
+                elif role == "tool":
+                    tool_call_id = m.get("additional_kwargs", {}).get("tool_call_id", "") or m.get("tool_call_id", "")
+                    clean_messages.append(ToolMessage(content=content, tool_call_id=tool_call_id))
+                else:
+                    print(f"⚠️ Skipped unknown message role/type: {role}")
+            elif hasattr(m, "type"):  # already BaseMessage
+                clean_messages.append(m)
+            else:
+                print(f"⚠️ Skipped unknown message format: {m}")
+
+        # Check for list nesting issues
+        if len(clean_messages) == 1 and isinstance(clean_messages[0], list):
+            clean_messages = clean_messages[0]
+
+        # Insert system prompt explicitly
+        clean_messages.insert(0, SystemMessage(content=system_prompt))
+
+        # Final explicit validation
+        from langchain_core.messages import BaseMessage
+        for i, msg in enumerate(clean_messages):
+            assert isinstance(msg, BaseMessage), f"Non-BaseMessage at index {i}: {msg}"
+        print("✅ clean_messages after validation:", clean_messages)
+
+        # Now safely invoke the LLM
+        response = llm_with_tools.invoke(clean_messages)
+        print("🤖 agent_node response:", response)
+
+        # Handle potential tool call
+        if hasattr(response, "tool_calls") and response.tool_calls:
+            tool_call = response.tool_calls[0]
+            tool_call_obj = ToolCall(
+                name=tool_call["name"],
+                args=tool_call["args"],
+                id=tool_call["id"]
+            )
+
+            ai_msg = AIMessage(content="", tool_calls=[tool_call_obj])
+            return {"messages": raw_messages + [ai_msg], "message_type": "tool_call"}
+
+
+        # Always explicitly convert response back to dict for Studio
+        response_dict = {
+            "type": "ai",
+            "content": response.content
+        }
+        final_messages = raw_messages + [response_dict]
+
+        return {"messages": final_messages, "message_type": "final"}
+
+    except Exception as e:
+        print(f"❌ agent_step error: {e}")
+        print(f"❌ final state at error: {state}")
+        raise
 
 agent_node = RunnableLambda(agent_step)
 
@@ -140,20 +198,26 @@ graph.add_node("chatbot", RunnableLambda(agent_step))
 tool_node = ToolNode([get_current_time_tool])
 graph.add_node("get_current_time_tool", tool_node)
 
+#graph.add_edge(START, "chatbot")
 # Entry point
-graph.set_entry_point("chatbot")
+graph.set_entry_point("chatbot") #this is sufficient to start the graph
+
+#for confitional routing
+tool_to_node_map = {
+    "get_current_time": "get_current_time_tool",
+    "get_current_time_tool": "get_current_time_tool"
+}
+
+def get_tool_name(state):
+    last = state["messages"][-1]
+    if isinstance(last, AIMessage) and last.tool_calls:
+        tool_name = last.tool_calls[0]["name"]
+        return tool_to_node_map.get(tool_name, "END")
+    return "END"
 
 # Route to tool if requested
-graph.add_conditional_edges(
-    "chatbot",
-    lambda state: (
-        state["messages"][-1].tool_calls[0]["name"]
-        if isinstance(state["messages"][-1], AIMessage) and state["messages"][-1].tool_calls
-        else "END"
-    )
-)
+graph.add_conditional_edges("chatbot", get_tool_name)
 
-# Loop tool response back to chatbot
 graph.add_edge("get_current_time_tool", "chatbot")
 
 # Compile the app
