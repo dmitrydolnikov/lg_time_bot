@@ -50,3 +50,7 @@ or for multiple cities:
   ]
 }
 ```
+
+# Example output
+![img.png](img.png)
+
