@@ -35,3 +35,14 @@ or for a specific city:
   ]
 }
 ```
+or for multiple cities:
+```json 
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "What time is it in New York and Los Angeles?"
+    }
+  ]
+}
+```

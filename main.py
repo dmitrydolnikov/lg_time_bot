@@ -68,7 +68,7 @@ def get_current_time(timezone:str="Etc/UTC") -> str:
     Examples:
     - "What time is it?" - timezone of the system if known, otherwise use UTC
     - "What time is it in Tokyo?" - timezone="Asia/Tokyo"
-    - "Tell me the time in LA" - timezone="America/Los_Angeles"
+    - "Tell me the time in LA, Moscow and Budapest " - timezone="America/Los_Angeles", "Europe/Budapest", "Europe/Moscow"
     """
     #ZoneInfo default timezone is Etc/UTC, so if no timezone is provided, it will return UTC time
     if timezone.upper() == "UTC":
@@ -117,7 +117,7 @@ def agent_step(state: dict) -> dict:
         if messages:
             last = messages[-1]
             if isinstance(last, AIMessage) and last.content and not getattr(last, "tool_calls", None):
-                print("✅ Already finalized. Skipping.")
+                print("Already finalized. Skipping.")
                 return {"messages": messages+[], "message_type": "final"}
 
         if not messages:
@@ -135,7 +135,7 @@ def agent_step(state: dict) -> dict:
         return {"messages": messages+[], "message_type": "final"}
 
     except Exception as e:
-        print(f"❌ agent_step error: {e}")
+        print(f"agent_step error: {e}")
         raise
 
 
@@ -155,18 +155,13 @@ graph.add_node("get_current_time", tool_node)
 # Entry point
 graph.set_entry_point("chatbot") #this is sufficient to start the graph
 
-#for confitional routing
-
-
+#for conditional routing
 def get_tool_name(state):
     last = state["messages"][-1]
-
     if isinstance(last, AIMessage) and last.tool_calls:
         return last.tool_calls[0]["name"]
-
     if isinstance(last, ToolMessage):
         return "chatbot"
-
     return END
 
 
@@ -176,7 +171,9 @@ graph.add_conditional_edges("chatbot", get_tool_name)
 #graph.add_edge("chatbot", "get_current_time")  #explicit name for Studio recognition
 
 graph.add_edge("get_current_time", "chatbot")
-graph.add_edge("chatbot", END)
+#graph.add_edge("chatbot", END) # not needed, as the graph will finish when the chatbot node is done using finish point and message type = "final"
+if False:
+    graph.add_edge("chatbot", "get_current_time")  # for Studio only
 # Compile the app
-#graph.set_finish_point("chatbot")
+graph.set_finish_point("chatbot")
 app = graph.compile()

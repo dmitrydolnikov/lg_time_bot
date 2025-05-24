@@ -20,7 +20,7 @@ def test_user_messages():
     # Simulate user messages
     user_messages = [
         #"Can you tell me the current time?",
-        "What time is it in Cupertino?",
+        "What time is it in Cupertino and Budapest?",
         #"What is the current UTC time?",
         #"Time check for Malvern, PA, please.",
         #"Just checking the time for Cupertino.",
@@ -30,7 +30,7 @@ def test_user_messages():
         # simulate raw Studio-style input
         state = {
             "messages": [
-                {"type": "human", "content": "What time is it in Tokyo?"}
+                {"type": "human", "content": "What time is it in Cupertino, Budapest and Moscow?"}
             ]
         }
 
