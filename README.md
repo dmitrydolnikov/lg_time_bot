@@ -9,7 +9,11 @@ pip install -r requirements.txt
 
 langgraph dev
 
-Create a file called `alibaba.key` and paste your Qwen-compatible API key in it.
+Create a file .env and paste your Qwen-compatible API key in it like:
+```env
+QWEN_API_KEY=sk-xxxxxxxxxx
+```
+
 
 # Langgraph queries
 when you run langgraph dev, browser will open and show the query editor with graph state
